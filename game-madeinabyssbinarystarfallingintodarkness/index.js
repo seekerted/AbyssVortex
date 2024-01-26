@@ -1,9 +1,11 @@
 const path = require('path');
-const { util } = require('vortex-api');
+const { fs, log, util } = require('vortex-api');
 
-const GAME_NEXUS_ID = 'madeinabyssbinarystarfallingintodarkness'
-const GAME_NAME = 'Made in Abyss: Binary Star Falling into Darkness'
-const GAME_STEAM_ID = '1324340'
+const GAME_NEXUS_ID = 'madeinabyssbinarystarfallingintodarkness';
+const GAME_NAME = 'Made in Abyss: Binary Star Falling into Darkness';
+const GAME_STEAM_ID = '1324340';
+
+const VALID_EXTENSIONS = ['.pak', '.txt', '.dll', '.ini', '.lua'];
 
 function main(context) {
 	context.registerGame({
@@ -19,6 +21,7 @@ function main(context) {
 		  'MadeInAbyss.exe',
 		  'MadeInAbyss-BSFD/Binaries/Win64/MadeInAbyss-Win64-Shipping.exe',
 		],
+		setup: prepareForModding,
 		environment: {
 		  SteamAPPId: GAME_STEAM_ID,
 		},
@@ -35,6 +38,13 @@ function main(context) {
 // The game is only available to be modded on Steam
 function findGame() {
 	return util.GameStoreHelper.findByAppId(GAME_STEAM_ID).then(game => game.gamePath);
+}
+
+// Directories where we'll be placing files
+async function prepareForModding(discovery) {
+	await fs.ensureDirWritableAsync(path.join(discovery.path, 'MadeInAbyss-BSFD', 'Content', 'Paks'));
+	await fs.ensureDirWritableAsync(path.join(discovery.path, 'MadeInAbyss-BSFD', 'Content', 'Paks', 'LogicMods'));
+	await fs.ensureDirWritableAsync(path.join(discovery.path, 'MadeInAbyss-BSFD', 'Binaries', 'Win64', 'Mods'));
 }
 
 // Mods can either be a UE4SS Lua mod, a UE4SS Blueprint mod, or a pak mod.
@@ -93,6 +103,10 @@ function installContent(files) {
 	}
 
 	for (let f of files) {
+		// Only copy files that are among the valid extensions.
+		// Fixes the "not part of the archive" error.
+		if (!VALID_EXTENSIONS.includes(path.extname(f).toLowerCase())) continue;
+
 		if ('.pak' === path.extname(f).toLowerCase()) {
 			let parentFolder = path.basename(path.dirname(f));
 

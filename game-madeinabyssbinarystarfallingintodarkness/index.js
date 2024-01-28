@@ -9,6 +9,8 @@ const GAME_STEAM_ID = '1324340';
 
 const VALID_EXTENSIONS = ['.pak', '.txt', '.dll', '.ini', '.lua'];
 
+const NOTIF_MIABSFD_PAK_CONFLICT = 'miabsfd-pak-conflict';
+
 function main(context) {
 	context.registerGame({
 		id: GAME_NEXUS_ID,
@@ -104,8 +106,11 @@ async function checkPakCompatibility(profileId, newDeployment, context) {
 		}
 	}
 
+	context.api.dismissNotification(NOTIF_MIABSFD_PAK_CONFLICT);
+
 	if (Object.keys(conflictReport).length > 0) {
 		context.api.sendNotification({
+			id: NOTIF_MIABSFD_PAK_CONFLICT,
 			type: 'warning',
 			title: 'Pak mod conflicts detected.',
 			actions: [{

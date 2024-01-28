@@ -1,5 +1,7 @@
 const path = require('path');
-const { fs, log, util } = require('vortex-api');
+const { fs, log, util, selectors } = require('vortex-api');
+const { spawnSync } = require('child_process');
+var crypto = require('crypto');
 
 const GAME_NEXUS_ID = 'madeinabyssbinarystarfallingintodarkness';
 const GAME_NAME = 'Made in Abyss: Binary Star Falling into Darkness';
@@ -15,7 +17,7 @@ function main(context) {
 		queryPath: findGame,
 		supportedTools: [],
 		queryModPath: () => '.',
-		logo: 'gameart.jpg',
+		logo: 'assets/gameart.jpg',
 		executable: () => 'MadeInAbyss.exe',
 		requiredFiles: [
 		  'MadeInAbyss.exe',
@@ -31,8 +33,124 @@ function main(context) {
 	});
 
 	context.registerInstaller('miabsfd-mod', 25, testSupportedContent, installContent);
+
+	context.api.onAsync('did-deploy', (profileId, newDeployment) => checkPakCompatibility(profileId, newDeployment, context));
 	
 	return true;
+}
+
+// Check if there is more than one pak mod that modifies the same file.
+async function checkPakCompatibility(profileId, newDeployment, context) {
+	const state = context.api.getState();
+
+	const gameId = selectors.profileById(state, profileId)?.gameId;
+	if (GAME_NEXUS_ID !== gameId) {
+		return Promise.resolve();
+	}
+
+	const extensionPath = selectors.gameById(state, GAME_NEXUS_ID).extensionPath;
+	const pakModsFolder = path.join(selectors.discoveryByGame(state, GAME_NEXUS_ID).path, 'MadeInAbyss-BSFD', 'Content', 'Paks');
+	const program = path.join(extensionPath, 'assets', 'repak.exe');
+
+	const skipFiles = ['MadeInAbyss-BSFD-WindowsNoEditor.pak', 'MadeInAbyss-BSFD-WindowsNoEditor_0_P.pak'];
+
+	const paks = await fs.readdirAsync(pakModsFolder);
+
+	let pakCompatibilityList = {};
+
+	// Retrieve the file list of each pak mod (using an external tool)
+	// Create a dictionary of game files (string) -> pak mods that have that file (string[])
+	for (let p of paks) {
+		if (skipFiles.includes(p) || '.pak' !== path.extname(p)) continue;
+
+		const pakPath = path.join(pakModsFolder, p);
+
+		// Apologies, I do not know enough about async js to get this to work async.
+		// Running spawnSync on a for loop shouldn't take too long... I hope.
+		const process = spawnSync(program, ['list', pakPath], {
+			encoding: 'utf8',
+		});
+		process.stdout.split('\n').forEach(f => {
+			if (!f) return;
+
+			if (f in pakCompatibilityList) {
+				pakCompatibilityList[f].push(p);
+			} else {
+				pakCompatibilityList[f] = [p];
+			}
+		});
+	}
+
+	const conflictReport = {};
+	const pakListHashes = {};
+
+	// Just give a quick string representation of a list of strings of pak mods
+	const hashFromPakList = (pakList) => {
+		return crypto.createHash('sha1').update(pakList.sort().join(',')).digest('base64');
+	};
+
+	// Reverse the dictionary such that it is now list of pak mods (string hash representation) -> game files (string[])
+	for (let [k, v] of Object.entries(pakCompatibilityList)) {
+		// Remove entries that have only one mod per game file (no conflicts found)
+		if (v.length <= 1) continue;
+
+		const pakListHash = hashFromPakList(v);
+
+		if (pakListHash in conflictReport) {
+			conflictReport[pakListHash].push(k);
+		} else {
+			conflictReport[pakListHash] = [k];
+			pakListHashes[pakListHash] = v;
+		}
+	}
+
+	if (Object.keys(conflictReport).length > 0) {
+		context.api.sendNotification({
+			type: 'warning',
+			title: 'Pak mod conflicts detected.',
+			actions: [{
+				title: 'See Report',
+				action: () => showConflictReport(context, conflictReport, pakListHashes),
+			}, {
+				title: 'Ignore',
+				action: dismiss => dismiss(),
+			}],
+		});
+	}
+
+	return Promise.resolve();
+}
+
+function showConflictReport(context, report, hashes) {
+	let header = 'The following pak mods modify the same file.\n' +
+		'While you can still play the game, it is best to resolve conflicts to ensure that things may work properly.\n\n' +
+		'To resolve conflicts, for each group below, ensure that only one mod is enabled.\n' +
+		'Pak mod compatibility checking is done on every deploy.';
+	let readableReport = '';
+
+	// Format readable report as:
+	// [list of pak mods]
+	//     - [list of game files they both manipulate]
+	// (repeat)
+	for (let [k, v] of Object.entries(report)) {
+		const pakList = hashes[k];
+		pakList.forEach(p => {
+			readableReport += p + '\n';
+		});
+
+		v.forEach(f => {
+			readableReport += '\t- [...]' + path.sep + path.basename(f) + '\n';
+		});
+
+		readableReport += '\n';
+	}
+
+	context.api.showDialog('info', 'Conflict Report', {
+		text: header,
+		message: readableReport,
+	}, [{
+		label: 'Close',
+	}]);
 }
 
 // The game is only available to be modded on Steam

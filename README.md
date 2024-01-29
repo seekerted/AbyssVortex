@@ -25,4 +25,4 @@ Get and install this mod via Nexus Mods (guide also in the link): https://www.ne
 Once installed, you can activate it in Vortex:
 
 1. Launch Vortex then go to Games
-1. Search for "Made in Abyss" and then Manage.
+1. Search for "Made in Abyss" and then Manage or Activate.

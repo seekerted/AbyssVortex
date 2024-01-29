@@ -20,7 +20,7 @@ Get and install this mod via Nexus Mods (guide also in the link): https://www.ne
 
 1. Get [Vortex](https://www.nexusmods.com/about/vortex/).
 1. Grab the latest release.
-1. Extract the zip onto `%appdata%\Roaming\Vortex\plugins`.
+1. Extract the zip onto `%appdata%\Roaming\Vortex\plugins\game-madeinabyssbinarystarfallingintodarkness\`.
 
 Once installed, you can activate it in Vortex:
 
